@@ -79,3 +79,73 @@ class SineLayer(nn.Module):
         """
 
         return torch.sin(self.omega * self.linear(x))
+
+
+class ImageSiren(nn.Module):
+    """ Network composed of SineLayers.
+
+    Parameters:
+    -----------
+    :param hidden_features: int
+        Number of hidden features (each hidden layer would have the same).
+    :param hidden_layers: int
+        Number of hidden layers.
+    :param first_omega: float
+        Hyperparameter.
+    :param hidden_omega: float
+        Hyperparameter.
+    :param custom_init_function: None or callable.
+        If None, then use the paper_init_ function.
+
+    Attributes:
+    -----------
+    net: nn.Sequential
+        Sequential including "SineLayer" and "nn.Linear" at the end.
+    """
+
+    def __init__(
+            self,
+            hidden_features,
+            hidden_layers=1,
+            first_omega=30,
+            hidden_omega=30,
+            custom_init_function=None,
+    ):
+        super().__init__()
+
+        # We will have 2 input features, representing the coordinates of the pixel.
+        in_features = 2
+
+        # We will have a single output feature, representing the pixel's value.
+        out_features = 1
+
+        net = nn.Sequential()
+        net.add_module('SineLayer',
+                       SineLayer(in_features, hidden_features, is_first=True, omega=first_omega, custom_init_function=custom_init_function))
+
+        for i in range(hidden_layers):
+            net.add_module('SineLayer_{}'.format(i),
+                           SineLayer(hidden_features, hidden_features, omega=hidden_omega, custom_init_function=custom_init_function))
+
+        net.add_module('Linear', nn.Linear(hidden_features, out_features))
+
+        # SineLayer already initialized, so we only need to initialize the Linear layer.
+        if custom_init_function is None:
+            paper_init_(net[-1].weight, is_first=False, omega=hidden_omega)
+        else:
+            custom_init_function(net[-1].weight, is_first=False, omega=hidden_omega)
+
+        self.net = net
+
+    def forward(self, x):
+        """Run forward pass.
+
+        Parameters:
+        -----------
+        :param x: input tensor of shape (n_samples, 2).
+
+        Returns:
+        --------
+        :return: output tensor of shape (n_samples, 1).
+        """
+        return self.net(x)
