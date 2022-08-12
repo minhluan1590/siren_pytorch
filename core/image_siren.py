@@ -133,7 +133,7 @@ class ImageSiren(nn.Module):
         if custom_init_function is None:
             paper_init_(net[-1].weight, is_first=False, omega=hidden_omega)
         else:
-            custom_init_function(net[-1].weight, is_first=False, omega=hidden_omega)
+            custom_init_function(net[-1].weight)
 
         self.net = net
 
