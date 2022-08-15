@@ -121,11 +121,13 @@ class ImageSiren(nn.Module):
 
         net = nn.Sequential()
         net.add_module('SineLayer',
-                       SineLayer(in_features, hidden_features, is_first=True, omega=first_omega, custom_init_function=custom_init_function))
+                       SineLayer(in_features, hidden_features, is_first=True, omega=first_omega,
+                                 custom_init_function=custom_init_function))
 
         for i in range(hidden_layers):
             net.add_module('SineLayer_{}'.format(i),
-                           SineLayer(hidden_features, hidden_features, omega=hidden_omega, custom_init_function=custom_init_function))
+                           SineLayer(hidden_features, hidden_features, omega=hidden_omega,
+                                     custom_init_function=custom_init_function))
 
         net.add_module('Linear', nn.Linear(hidden_features, out_features))
 
@@ -149,3 +151,82 @@ class ImageSiren(nn.Module):
         :return: output tensor of shape (n_samples, 1).
         """
         return self.net(x)
+
+
+def generate_coordinates(n):
+    """Generate regular grid of 2D coordinates on [0, n] x [0, n].
+
+    Parameters:
+    -----------
+    :param n: int
+        Number of pixels in each dimension.
+
+    Returns:
+    --------
+    :return: np.array of shape (n^2, 2).
+        An array of 2D coordinates, in which each row is a 2D coordinate.
+    """
+    rows, cols = np.meshgrid(np.arange(n), np.arange(n), indexing='ij')
+    coords_abs = np.stack([rows.ravel(), cols.ravel()], axis=1)
+
+    return coords_abs
+
+
+class PixelDataset(Dataset):
+    """Dataset yielding coordinates, intensities and (higher) derivatives.
+
+    Parameters:
+    -----------
+    :param img: np.array
+        2D image representing a grayscale image.
+
+    Attributes:
+    -----------
+    size: int
+        Height and width of the square image.
+
+    coords_abs: np.ndarray
+        Array of shape (size ^ 2, 2) containing the absolute coordinates of each pixel.
+
+    grad: np.array
+        Array of shape (size, size, 2) representing the gradient of the image.
+
+    grad_norm: np.array
+        Array of shape (size, size) representing the approximate gradient norm of the image.
+
+    laplace: np.array
+        Array of shape (size, size) representing the Laplacian of the image.
+    """
+
+    def __init__(self, img):
+        if not (img.ndim == 2 and img.shape[0] == img.shape[1]):
+            raise ValueError('Image must be a square matrix.')
+
+        self.img = img
+        self.size = img.shape[0]
+        self.coords_abs = generate_coordinates(self.size)
+        self.grad = np.stack([
+            sobel(img, axis=0),
+            sobel(img, axis=1)
+        ], axis=-1)
+        self.grad_norm = np.linalg.norm(self.grad, axis=-1)
+        self.laplace = laplace(img)
+
+    def __len__(self):
+        """Determine the size of the dataset."""
+        return self.size ** 2
+
+    def __getitem__(self, idx):
+        """Get all relevant data for a single coordinate."""
+        coords_abs = self.coords_abs[idx]
+        r, c = coords_abs
+        coords = 2 * (coords_abs / self.size) - 1
+
+        return {
+            'coords': coords,
+            'coords_abs': coords_abs,
+            'intensity': self.img[r, c],
+            'grad': self.grad[r, c],
+            'grad_norm': self.grad_norm[r, c],
+            'laplace': self.laplace[r, c]
+        }
