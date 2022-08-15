@@ -230,3 +230,66 @@ class PixelDataset(Dataset):
             'grad_norm': self.grad_norm[r, c],
             'laplace': self.laplace[r, c]
         }
+
+
+class GradientUtils:
+    @staticmethod
+    def gradient(target, coords):
+        """Compute the gradient of the target function at the given coordinates.
+
+        Parameters:
+        -----------
+        :param target: torch.Tensor
+            2D tensor of shape (n_coods, ?) representing the targets.
+        :param coords: torch.Tensor
+            2D tensor of shape (n_coords, 2) representing the coordinates.
+        """
+        return torch.autograd.grad(target,
+                                   coords,
+                                   grad_outputs=torch.ones_like(target),
+                                   create_graph=True)[0]
+
+    @staticmethod
+    def divergence(grad, coords):
+        """Compute divergence.
+
+        Parameters
+        ----------
+        :param grad: torch.Tensor
+            2D tensor of shape (n_coords, 2) representing the gradient.
+        :param coords: torch.Tensor
+            2D tensor of shape (n_coords, 2) representing the coordinates.
+
+        Returns
+        -------
+        :return: torch.Tensor
+            2D tensor of shape (n_coords, 1) representing the divergence.
+
+        Notes
+        -----
+        In a 2D case, this will give us f_{xx} + f_{yy}
+        """
+        div = 0.0
+        for i in range(coords.shape[1]):
+            div += torch.autograd.grad(
+                grad[:, i], coords, grad_outputs=torch.ones_like(grad[:, i]), create_graph=True)[0][:, i: i + 1]
+        return div
+
+    @staticmethod
+    def laplace(target, coords):
+        """Compute the laplace of the target function at the given coordinates.
+
+        Parameters:
+        -----------
+        :param target: torch.Tensor
+            2D tensor of shape (n_coods, 1) representing the targets.
+        :param coords: torch.Tensor
+            2D tensor of shape (n_coords, 2) representing the coordinates.
+
+        Returns
+        -------
+        :return: torch.Tensor
+            2D tensor of shape (n_coords, 1) representing the laplace.
+        """
+        grad = GradientUtils.gradient(target, coords)
+        return GradientUtils.divergence(grad, coords)
